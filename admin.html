@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MERCH. | Operations Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: #f3f4f6; margin: 0; padding: 0; color: #1f2937; }
+        .hidden { display: none !important; }
+        
+        .login-wrapper { display: flex; justify-content: center; align-items: center; height: 100vh; background: #111827; }
+        .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); text-align: center; width: 340px; }
+        .login-box h2 { margin-top: 0; color: #111827; }
+        .login-box input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 0.95rem; outline: none; transition: 0.2s; }
+        .login-box input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        .btn-main { background: #111827; color: white; padding: 12px; width: 100%; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem; transition: 0.2s; }
+        .btn-main:hover { background: #374151; }
+        
+        .sidebar { width: 260px; background: #111827; color: #9ca3af; position: fixed; height: 100vh; padding: 25px 20px; display: flex; flex-direction: column; }
+        .sidebar h2 { text-align: center; letter-spacing: 2px; margin-bottom: 50px; color: white; font-weight: 900; font-size: 1.5rem; }
+        .nav-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 15px; background: none; border: none; color: #9ca3af; text-align: left; cursor: pointer; font-size: 0.95rem; font-weight: 500; border-radius: 8px; margin-bottom: 5px; transition: all 0.2s; }
+        .nav-btn.active, .nav-btn:hover { color: white; background: #1f2937; }
+        .nav-btn.logout { margin-top: auto; color: #f87171; }
+        
+        .main-content { margin-left: 260px; padding: 40px; max-width: 1400px; }
+        .page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 25px; }
+        .page-header h2 { margin: 0; font-size: 1.8rem; color: #111827; font-weight: 800; }
+        
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); border: 1px solid #e5e7eb; }
+        .card-title { font-size: 1.1rem; font-weight: 700; margin: 0 0 20px 0; color: #111827; display: flex; align-items: center; gap: 8px; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 15px 12px; text-align: left; border-bottom: 1px solid #f3f4f6; }
+        th { color: #6b7280; font-size: 0.8rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+        td { font-size: 0.95rem; vertical-align: middle; }
+        tr:hover { background-color: #f9fafb; }
+        
+        .btn-action { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; margin-right: 5px; color: white; transition: 0.2s; }
+        .btn-ship { background: #10b981; } 
+        .btn-del { background: #ef4444; } 
+
+        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: inline-block; }
+        .status-healthy { background: #d1fae5; color: #065f46; }
+        .status-low { background: #fef3c7; color: #92400e; }
+        .status-out { background: #fee2e2; color: #991b1b; }
+        .status-shipped { background: #d1fae5; color: #065f46; border: 1px solid #34d399; }
+        .status-pending { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+
+        .inv-filters { display: flex; gap: 10px; width: 100%; align-items: center; }
+        .inv-filter-btn { padding: 8px 16px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #4b5563; transition: 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .inv-filter-btn:hover { background: #f9fafb; border-color: #d1d5db; }
+        .inv-filter-btn.active { background: #111827; color: white; border-color: #111827; }
+
+        /* ✨ NEW: Export Button Style */
+        .btn-export { margin-left: auto; background: #10b981; color: white; border-color: #10b981; }
+        .btn-export:hover { background: #059669; color: white; }
+
+        .tools-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 25px; margin-bottom: 25px; }
+        
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #4b5563; margin-bottom: 6px; }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.95rem; font-family: inherit; background: #fdfdfd; transition: border-color 0.2s; outline: none; }
+        .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        
+        .dropzone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 40px 20px; text-align: center; background: #f8fafc; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 220px; }
+        .dropzone:hover { border-color: #3b82f6; background: #eff6ff; }
+        .dropzone-icon { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.8; }
+        .dropzone-text { font-size: 0.9rem; color: #64748b; margin-bottom: 20px; line-height: 1.5; }
+        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; }
+        .file-input-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; height: 100%; }
+        .btn-outline { border: 1px solid #d1d5db; background: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; color: #374151; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+
+    </style>
+</head>
+<body>
+
+    <div id="loginSection" class="login-wrapper">
+        <div class="login-box">
+            <h2>MERCH. Admin</h2>
+            <input type="email" id="email" placeholder="Email Address">
+            <input type="password" id="password" placeholder="Password">
+            <button class="btn-main" onclick="handleLogin()">Sign In</button>
+            <p id="loginError" style="color: #ef4444; font-size: 0.85rem; margin-top: 15px;"></p>
+        </div>
+    </div>
+
+    <div id="dashboardSection" class="hidden">
+        
+        <div class="sidebar">
+            <h2>MERCH.</h2>
+            <button class="nav-btn active" onclick="switchTab('orders')">📦 Orders</button>
+            <button class="nav-btn" onclick="switchTab('inventory')">👕 Inventory</button>
+            <button class="nav-btn logout" onclick="logout()">🚪 Sign Out</button>
+        </div>
+
+        <div class="main-content">
+            
+            <div id="tab-orders" class="tab-content">
+                <div class="page-header">
+                    <h2>Order Fulfillment</h2>
+                </div>
+                <div class="card">
+                    <table id="ordersTable">
+                        <thead>
+                            <tr><th>Customer</th><th>Order Details</th><th>bKash TRX</th><th>Status</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="ordersList"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tab-inventory" class="tab-content hidden">
+                <div class="page-header">
+                    <h2>Inventory Management</h2>
+                </div>
+                
+                <div class="tools-grid">
+                    
+                    <div class="card">
+                        <h3 class="card-title">✨ Add Single Product</h3>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Product Name</label>
+                                <input type="text" id="prodName" class="form-control" placeholder="e.g. Classic Heavyweight Tee">
+                            </div>
+                            <div class="form-group">
+                                <label>Category</label>
+                                <select id="prodCategory" class="form-control">
+                                    <option value="T-Shirts">T-Shirts</option>
+                                    <option value="Headwear">Headwear</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Price (BDT)</label>
+                                <input type="number" id="prodPrice" class="form-control" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label>Initial Stock</label>
+                                <input type="number" id="prodStock" class="form-control" placeholder="Qty">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Product Image</label>
+                            <input type="file" id="prodImage" accept="image/*" class="form-control" style="padding: 7px;">
+                        </div>
+
+                        <button class="btn-main" onclick="uploadAndSaveProduct()" id="saveBtn" style="margin-top: 5px;">Save Product to Catalog</button>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="card-title">📂 Bulk Import (CSV)</h3>
+                        
+                        <div class="dropzone">
+                            <div class="dropzone-icon">📊</div>
+                            <div class="dropzone-text">
+                                Upload your <strong>apparel.csv</strong> to instantly map and create multiple products at once.
+                            </div>
+                            
+                            <div class="file-input-wrapper" style="margin-bottom: 15px;">
+                                <button class="btn-outline">Select CSV File</button>
+                                <input type="file" id="csvFileInput" accept=".csv" onchange="updateFileName(this)">
+                            </div>
+                            <div id="fileNameDisplay" style="font-size: 0.8rem; color: #3b82f6; margin-bottom: 15px; font-weight: 600;"></div>
+                            
+                            <button class="btn-main" onclick="handleCSVUpload()" id="csvBtn">Upload & Sync</button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="card">
+                    <div class="page-header" style="margin-bottom: 15px;">
+                        <h3 class="card-title" style="margin: 0;">Current Catalog</h3>
+                        <div class="inv-filters">
+                            <button class="inv-filter-btn active" onclick="applyInvFilter('all', this)">All Items</button>
+                            <button class="inv-filter-btn" onclick="applyInvFilter('low', this)">⚠️ Low Stock (≤5)</button>
+                            <button class="inv-filter-btn" onclick="applyInvFilter('out', this)">❌ Out of Stock</button>
+                            
+                            <button class="inv-filter-btn btn-export" onclick="exportCurrentViewToCSV()">📥 Export Report</button>
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Stock Level</th><th>Price</th></tr></thead>
+                        <tbody id="productsList"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+<script>
+    const SB_URL = 'https://qipqpadlogaimotlgtph.supabase.co'; 
+    const SB_KEY = 'sb_publishable_xT3HK-INqoFO28XKhafAIg_2d3Brzgk'; 
+    const client = supabase.createClient(SB_URL, SB_KEY);
+
+    let allProductsData = []; 
+    let currentViewData = []; // ✨ NEW: We track exactly what is on the screen to export it
+
+    function updateFileName(input) {
+        const display = document.getElementById('fileNameDisplay');
+        if (input.files.length > 0) display.innerText = "Selected: " + input.files[0].name;
+        else display.innerText = "";
+    }
+
+    async function checkSession() {
+        const { data: { session } } = await client.auth.getSession();
+        if (session) {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('dashboardSection').classList.remove('hidden');
+            fetchOrders();
+            fetchProducts();
+        }
+    }
+    checkSession(); 
+
+    async function handleLogin() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const btn = event.target;
+        btn.innerText = "Authenticating...";
+        
+        const { error } = await client.auth.signInWithPassword({ email, password });
+        if (error) {
+            document.getElementById('loginError').innerText = error.message;
+            btn.innerText = "Sign In";
+        } else window.location.reload(); 
+    }
+    async function logout() { await client.auth.signOut(); window.location.reload(); }
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-' + tabName).classList.remove('hidden');
+        event.target.classList.add('active');
+    }
+
+    async function fetchOrders() {
+        const { data } = await client.from('orders').select('*').order('created_at', { ascending: false });
+        if(!data) return;
+        document.getElementById('ordersList').innerHTML = data.map(o => {
+            const isShipped = o.status === 'Shipped';
+            const badgeClass = isShipped ? 'status-shipped' : 'status-pending';
+            return `<tr>
+                <td><strong>${o.customer_name}</strong></td>
+                <td style="font-size:0.85rem; color:#4b5563;">${o.size}</td>
+                <td style="font-family: monospace; color: #111827;">${o.transaction_id}</td>
+                <td><span class="status-badge ${badgeClass}">${o.status || 'Pending'}</span></td>
+                <td>
+                    ${!isShipped ? `<button class="btn-action btn-ship" onclick="updateStatus('${o.id}', 'Shipped')">Ship</button>` : ''}
+                    <button class="btn-action btn-del" onclick="deleteOrder('${o.id}')">Delete</button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function updateStatus(id, newStatus) { await client.from('orders').update({ status: newStatus }).eq('id', id); fetchOrders(); }
+    async function deleteOrder(id) { if(confirm("Permanently delete this order?")) { await client.from('orders').delete().eq('id', id); fetchOrders(); } }
+
+    async function fetchProducts() {
+        const { data } = await client.from('products').select('*').order('stock_quantity', { ascending: true });
+        if(data) {
+            allProductsData = data;
+            renderAdminProducts('all');
+        }
+    }
+
+    function renderAdminProducts(filterType) {
+        const tbody = document.getElementById('productsList');
+        
+        let filteredData = allProductsData;
+        if (filterType === 'low') filteredData = allProductsData.filter(p => p.stock_quantity > 0 && p.stock_quantity <= 5);
+        if (filterType === 'out') filteredData = allProductsData.filter(p => p.stock_quantity <= 0);
+
+        // Save the filtered data so the Export button knows what to download!
+        currentViewData = filteredData;
+
+        if (filteredData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#9ca3af; padding: 30px;">No items match this filter.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filteredData.map(p => {
+            let badgeClass = 'status-healthy';
+            let statusText = `${p.stock_quantity} in stock`;
+            
+            if (p.stock_quantity <= 0) { badgeClass = 'status-out'; statusText = 'Out of Stock'; }
+            else if (p.stock_quantity <= 5) { badgeClass = 'status-low'; statusText = `Low Stock (${p.stock_quantity})`; }
+
+            return `
+                <tr>
+                    <td><img src="${p.img_url}" style="width:48px; height:48px; object-fit:cover; border-radius:8px; border: 1px solid #e5e7eb;"></td>
+                    <td><strong>${p.name}</strong></td>
+                    <td><span style="background:#f3f4f6; color:#4b5563; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight:600;">${p.category}</span></td>
+                    <td><span class="status-badge ${badgeClass}">${statusText}</span></td>
+                    <td style="font-weight: 600; color: #111827;">${p.price} BDT</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function applyInvFilter(type, btnElement) {
+        document.querySelectorAll('.inv-filter-btn').forEach(b => b.classList.remove('active'));
+        btnElement.classList.add('active');
+        renderAdminProducts(type);
+    }
+
+    // ✨ NEW: The Export Logic
+    function exportCurrentViewToCSV() {
+        if (currentViewData.length === 0) {
+            alert("There is no data to export in the current view.");
+            return;
+        }
+
+        // 1. Format the data perfectly for Excel
+        const exportData = currentViewData.map(p => ({
+            "Product ID": p.id,
+            "Product Name": p.name,
+            "Category": p.category,
+            "Price (BDT)": p.price,
+            "Current Stock Quantity": p.stock_quantity,
+            "Inventory Status": p.stock_quantity <= 0 ? "Out of Stock" : (p.stock_quantity <= 5 ? "Low Stock" : "Healthy")
+        }));
+
+        // 2. Use PapaParse to instantly convert the JSON to a CSV string
+        const csvString = Papa.unparse(exportData);
+
+        // 3. Create a temporary download link in the browser to save the file
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Merchandising_Inventory_Report.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    async function uploadAndSaveProduct() {
+        const name = document.getElementById('prodName').value, category = document.getElementById('prodCategory').value, price = document.getElementById('prodPrice').value, stock = document.getElementById('prodStock').value, fileInput = document.getElementById('prodImage'), btn = document.getElementById('saveBtn');
+        if(!name || !price || !stock || fileInput.files.length === 0) return alert("Please complete all fields to add a product.");
+        btn.innerText = "Uploading Image..."; btn.style.opacity = "0.7";
+        const file = fileInput.files[0], fileName = `${Math.random()}.${file.name.split('.').pop()}`; 
+        const { error: uploadErr } = await client.storage.from('product-images').upload(fileName, file);
+        if (uploadErr) { btn.innerText = "Save Product to Catalog"; btn.style.opacity = "1"; return alert("Upload Failed: " + uploadErr.message); }
+        const { data: { publicUrl } } = client.storage.from('product-images').getPublicUrl(fileName);
+        
+        btn.innerText = "Saving to Database...";
+        await client.from('products').insert([{ name, category, price: parseInt(price), stock_quantity: parseInt(stock), img_url: publicUrl }]);
+        
+        alert("✅ Product successfully added to catalog!");
+        document.getElementById('prodName').value = ''; document.getElementById('prodPrice').value = ''; document.getElementById('prodStock').value = ''; fileInput.value = '';
+        btn.innerText = "Save Product to Catalog"; btn.style.opacity = "1";
+        fetchProducts();
+    }
+
+    function handleCSVUpload() {
+        const fileInput = document.getElementById('csvFileInput'), btn = document.getElementById('csvBtn');
+        if (fileInput.files.length === 0) return alert("Please select a CSV file first.");
+        btn.innerText = "Parsing File..."; btn.style.opacity = "0.7"; btn.disabled = true;
+
+        Papa.parse(fileInput.files[0], {
+            header: true, skipEmptyLines: true,  
+            complete: async function(results) {
+                const productsToUpload = [];
+                results.data.forEach(row => {
+                    if (row['Title']) productsToUpload.push({
+                        name: row['Title'], category: row['Type'] ? row['Type'].charAt(0).toUpperCase() + row['Type'].slice(1) : 'Apparel',
+                        price: parseInt(row['Variant Price']) || 500, stock_quantity: parseInt(row['Variant Inventory Qty']) || 10, img_url: row['Image Src'] || 'https://via.placeholder.com/200' 
+                    });
+                });
+                if (productsToUpload.length === 0) { btn.innerText = "Upload & Sync"; btn.style.opacity = "1"; btn.disabled = false; return; }
+                btn.innerText = `Syncing ${productsToUpload.length} items...`;
+                const { error } = await client.from('products').insert(productsToUpload);
+                if (error) alert("Error: " + error.message);
+                else { 
+                    alert(`✅ Successfully synced ${productsToUpload.length} products.`); 
+                    fileInput.value = ''; 
+                    document.getElementById('fileNameDisplay').innerText = '';
+                    fetchProducts(); 
+                }
+                btn.innerText = "Upload & Sync"; btn.style.opacity = "1"; btn.disabled = false;
+            }
+        });
+    }
+</script>
+</body>
+</html>
